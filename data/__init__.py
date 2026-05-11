@@ -1,0 +1,1 @@
+"""Ukladanie a načítavanie rebríčka rekordov."""
