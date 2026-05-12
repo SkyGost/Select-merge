@@ -1,17 +1,16 @@
 """
-Hlavné okno aplikácie.
+Главное окно приложения Connect-Merge.
 
-Obsahuje:
-- App           : root okno + prepínanie medzi obrazovkami (menu / hra / rebríček)
-- MenuFrame     : úvodné menu (Hrať / Rebríček / Koniec)
-- HallOfFame    : tabuľka top-10 rekordov
-- GameOverDialog: modálne okno po skončení hry (zadanie prezývky)
+Содержит:
+- App             — корневое окно + переключение между экранами
+- MenuFrame       — главное меню с декоративными кружками на фоне
+- HallOfFameFrame — таблица рекордов через простые Label (без Treeview)
+- GameOverDialog  — диалог конца игры (ввод никнейма)
 """
 
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
 from typing import Optional
 
 import config
@@ -20,11 +19,11 @@ from ui.game_view import GameView
 
 
 # ====================================================================
-#  Hlavná aplikácia — root okno + prepínanie scén
+#  App — корневое окно + управление экранами
 # ====================================================================
 
 class App(tk.Tk):
-    """Root okno aplikácie. Spravuje prechody medzi obrazovkami."""
+    """Корневое окно. Управляет переходами между экранами."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -32,64 +31,80 @@ class App(tk.Tk):
         self.configure(bg=config.BG_COLOR)
         self.resizable(False, False)
 
-        # Kontajner pre aktuálnu obrazovku
+        # Текущий активный экран
         self.current_frame: Optional[tk.Frame] = None
-
         self.show_menu()
 
     def _swap_frame(self, new_frame: tk.Frame) -> None:
-        """Nahradí aktuálnu obrazovku novou."""
+        """Заменяет текущий экран новым, старый уничтожается."""
         if self.current_frame is not None:
             self.current_frame.destroy()
         self.current_frame = new_frame
         self.current_frame.pack(fill="both", expand=True)
 
-    # ----------------------------------------------------------------
-    #  Prepínače obrazoviek
-    # ----------------------------------------------------------------
-
     def show_menu(self) -> None:
         self._swap_frame(MenuFrame(self, self))
 
     def show_game(self) -> None:
-        view = GameView(
+        self._swap_frame(GameView(
             self,
             on_game_over=self.on_game_over,
             on_back_to_menu=self.show_menu,
-        )
-        self._swap_frame(view)
+        ))
 
     def show_hall_of_fame(self) -> None:
         self._swap_frame(HallOfFameFrame(self, self.show_menu))
 
-    def on_game_over(self, score: int, max_circle: int) -> None:
-        """Po skončení hry: ukázať dialóg na zadanie prezývky."""
-        dialog = GameOverDialog(self, score, max_circle)
-        self.wait_window(dialog)        # počká, kým dialóg zatvoria
-        # Po dialógu sa vrátime na menu
+    def on_game_over(self, score: int, max_circle: int, moves: int = 0) -> None:
+        """Вызывается когда игра закончена — показывает диалог с никнеймом."""
+        dialog = GameOverDialog(self, score, max_circle, moves)
+        self.wait_window(dialog)
         self.show_menu()
 
 
 # ====================================================================
-#  Úvodné menu
+#  MenuFrame — главное меню
 # ====================================================================
 
 class MenuFrame(tk.Frame):
-    """Úvodné menu s tlačidlami Hrať / Rebríček / Koniec."""
+    """Экран главного меню с декоративными кружками на фоне."""
+
+    # Декоративные кружки: (x, y, радиус, значение)
+    # Два больших по краям, три маленьких в углах
+    _BG_CIRCLES = [
+        (555, 120, 62, 16),   # большой справа вверху
+        (30,  400, 68, 32),   # большой слева внизу
+        (80,   80, 36,  4),   # маленький слева вверху
+        (540, 450, 38, 64),   # маленький справа внизу
+        (310, 540, 32,  8),   # маленький снизу по центру
+    ]
 
     def __init__(self, parent: tk.Widget, app: App) -> None:
-        super().__init__(parent, bg=config.BG_COLOR, padx=60, pady=60)
+        super().__init__(parent, bg=config.BG_COLOR)
         self.app = app
 
-        title = tk.Label(
+        # Canvas на весь экран — кружки рисуются на нём, виджеты поверх
+        self.canvas = tk.Canvas(
             self,
+            bg=config.BG_COLOR,
+            highlightthickness=0,
+            width=630,
+            height=630,
+        )
+        self.canvas.pack(fill="both", expand=True)
+
+        # Сначала фоновые кружки (они под всеми виджетами)
+        self._draw_bg_circles()
+
+        # Заголовок через create_text — нет белого фона как у Label
+        self.canvas.create_text(
+            315, 100,
             text=config.TXT_TITLE,
             font=("Helvetica", 36, "bold"),
-            bg=config.BG_COLOR,
-            fg=config.TEXT_COLOR_DARK,
+            fill=config.TEXT_COLOR_DARK,
         )
-        title.pack(pady=(20, 40))
 
+        # Стиль кнопок
         btn_style = {
             "font": ("Helvetica", 16),
             "width": 18,
@@ -97,108 +112,169 @@ class MenuFrame(tk.Frame):
             "bg": "#8f7a66",
             "fg": "white",
             "activebackground": "#9f8a76",
+            "relief": "flat",
             "bd": 0,
         }
 
-        tk.Button(
-            self, text=config.TXT_PLAY,
-            command=self.app.show_game,
-            **btn_style,
-        ).pack(pady=8)
+        # Кнопки поверх canvas через create_window
+        self.canvas.create_window(315, 240, window=tk.Button(
+            self.canvas, text=config.TXT_PLAY,
+            command=self.app.show_game, **btn_style,
+        ))
+        self.canvas.create_window(315, 320, window=tk.Button(
+            self.canvas, text=config.TXT_HIGHSCORES,
+            command=self.app.show_hall_of_fame, **btn_style,
+        ))
+        self.canvas.create_window(315, 400, window=tk.Button(
+            self.canvas, text=config.TXT_EXIT,
+            command=self.app.destroy, **btn_style,
+        ))
 
-        tk.Button(
-            self, text=config.TXT_HIGHSCORES,
-            command=self.app.show_hall_of_fame,
-            **btn_style,
-        ).pack(pady=8)
-
-        tk.Button(
-            self, text=config.TXT_EXIT,
-            command=self.app.destroy,
-            **btn_style,
-        ).pack(pady=8)
+    def _draw_bg_circles(self) -> None:
+        """
+        Рисует декоративные кружки на фоне меню.
+        Полные цвета из игровой палитры, белые цифры внутри — как в игре.
+        """
+        for (x, y, r, value) in self._BG_CIRCLES:
+            color = config.CIRCLE_COLORS.get(value, config.DEFAULT_CIRCLE_COLOR)
+            self.canvas.create_oval(
+                x - r, y - r, x + r, y + r,
+                fill=color, outline="",
+            )
+            font_size = 20 if r >= 55 else (16 if r >= 40 else 13)
+            self.canvas.create_text(
+                x, y,
+                text=str(value),
+                font=("Helvetica", font_size, "bold"),
+                fill="#ffffff",
+            )
 
 
 # ====================================================================
-#  Rebríček rekordov
+#  HallOfFameFrame — таблица рекордов
 # ====================================================================
 
 class HallOfFameFrame(tk.Frame):
-    """Obrazovka s tabuľkou top-10 hráčov."""
+    """
+    Экран рекордов — без Treeview.
+    Каждая строка — набор Label, выровненных по центру.
+    Никакого ресайза, никакого выделения, никаких глюков.
+    """
 
     def __init__(self, parent: tk.Widget, on_back) -> None:
-        super().__init__(parent, bg=config.BG_COLOR, padx=40, pady=40)
+        super().__init__(parent, bg=config.BG_COLOR)
         self.on_back = on_back
 
-        title = tk.Label(
+        # Заголовок
+        tk.Label(
             self,
             text=config.TXT_HIGHSCORES,
             font=("Helvetica", 28, "bold"),
             bg=config.BG_COLOR,
             fg=config.TEXT_COLOR_DARK,
-        )
-        title.pack(pady=(0, 20))
+        ).pack(pady=(30, 20))
 
-        # Tabuľka cez ttk.Treeview
-        columns = ("rank", "nick", "score", "max_circle", "date")
-        tree = ttk.Treeview(
-            self, columns=columns, show="headings", height=10,
-        )
-        tree.heading("rank", text="#")
-        tree.heading("nick", text=config.TXT_NICK)
-        tree.heading("score", text=config.TXT_SCORE)
-        tree.heading("max_circle", text=config.TXT_MAX_CIRCLE)
-        tree.heading("date", text=config.TXT_DATE)
+        # Контейнер для таблицы — фиксированной ширины, по центру
+        table_frame = tk.Frame(self, bg=config.BG_COLOR)
+        table_frame.pack(pady=10)
 
-        tree.column("rank", width=40, anchor="center")
-        tree.column("nick", width=140, anchor="w")
-        tree.column("score", width=100, anchor="e")
-        tree.column("max_circle", width=120, anchor="e")
-        tree.column("date", width=110, anchor="center")
+        # ── Заголовочная строка ──────────────────────────────────────
+        header_style = {
+            "font": ("Helvetica", 13, "bold"),
+            "bg": "#e8e4de",           # чуть темнее фона — отделяет заголовок
+            "fg": config.TEXT_COLOR_DARK,
+            "pady": 6,
+            "relief": "flat",
+        }
+
+        # Ширины колонок в символах (фиксированные — не зависят от данных)
+        col_widths = {"rank": 4, "nick": 14, "score": 10, "max": 12, "moves": 8}
+
+        tk.Label(table_frame, text="#",
+                 width=col_widths["rank"],  **header_style).grid(row=0, column=0, padx=2)
+        tk.Label(table_frame, text=config.TXT_NICK,
+                 width=col_widths["nick"],  **header_style).grid(row=0, column=1, padx=2)
+        tk.Label(table_frame, text=config.TXT_SCORE,
+                 width=col_widths["score"], **header_style).grid(row=0, column=2, padx=2)
+        tk.Label(table_frame, text=config.TXT_MAX_CIRCLE,
+                 width=col_widths["max"],   **header_style).grid(row=0, column=3, padx=2)
+        tk.Label(table_frame, text=config.TXT_MOVES,
+                 width=col_widths["moves"], **header_style).grid(row=0, column=4, padx=2)
+
+        # Разделительная линия под заголовком
+        sep = tk.Frame(table_frame, bg="#d0ccc6", height=1)
+        sep.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(0, 4))
+
+        # ── Строки с данными ─────────────────────────────────────────
+        row_style = {
+            "font": ("Helvetica", 13),
+            "bg": config.BG_COLOR,
+            "fg": config.TEXT_COLOR_DARK,
+            "pady": 5,
+            "relief": "flat",
+        }
 
         entries = scores.load_scores()
+
         if not entries:
-            tree.insert("", "end", values=("—", "(prázdne)", "—", "—", "—"))
+            # Таблица пустая — показываем заглушку
+            tk.Label(
+                table_frame,
+                text="— пусто —",
+                font=("Helvetica", 13),
+                bg=config.BG_COLOR,
+                fg="#aaa",
+            ).grid(row=2, column=0, columnspan=5, pady=20)
         else:
             for i, entry in enumerate(entries, start=1):
-                tree.insert("", "end", values=(
-                    i,
-                    entry.get("nick", "???"),
-                    entry.get("score", 0),
-                    entry.get("max_circle", 0),
-                    entry.get("date", ""),
-                ))
+                # Чередуем цвет строк для читаемости
+                row_bg = "#f7f5f2" if i % 2 == 0 else config.BG_COLOR
+                rs = {**row_style, "bg": row_bg}
 
-        tree.pack(pady=10)
+                tk.Label(table_frame, text=str(i),
+                         width=col_widths["rank"],  **rs).grid(row=i+1, column=0, padx=2)
+                tk.Label(table_frame, text=entry.get("nick", "???"),
+                         width=col_widths["nick"],  **rs).grid(row=i+1, column=1, padx=2)
+                tk.Label(table_frame, text=str(entry.get("score", 0)),
+                         width=col_widths["score"], **rs).grid(row=i+1, column=2, padx=2)
+                tk.Label(table_frame, text=str(entry.get("max_circle", 0)),
+                         width=col_widths["max"],   **rs).grid(row=i+1, column=3, padx=2)
+                tk.Label(table_frame, text=str(entry.get("moves", "—")),
+                         width=col_widths["moves"], **rs).grid(row=i+1, column=4, padx=2)
 
+        # Кнопка «Назад»
         tk.Button(
             self, text=config.TXT_BACK,
             command=self.on_back,
             font=("Helvetica", 12),
             width=12,
-        ).pack(pady=20)
+            bg="#8f7a66",
+            fg="white",
+            activebackground="#9f8a76",
+            relief="flat",
+            bd=0,
+        ).pack(pady=30)
 
 
 # ====================================================================
-#  Dialóg konca hry
+#  GameOverDialog — диалог конца игры
 # ====================================================================
 
 class GameOverDialog(tk.Toplevel):
     """
-    Modálne okno zobrazené po skončení hry.
-
-    Ukáže skóre + najväčší kruh, a ak je skóre dosť dobré, opýta sa na
-    prezývku a uloží záznam do rebríčka.
+    Модальное окно после конца игры.
+    Показывает итоги и если результат в топ-10 — просит ввести никнейм.
     """
 
-    def __init__(self, parent: tk.Widget, score: int, max_circle: int) -> None:
+    def __init__(self, parent: tk.Widget, score: int, max_circle: int, moves: int = 0) -> None:
         super().__init__(parent, bg=config.BG_COLOR)
         self.title(config.TXT_GAME_OVER)
-        self.score = score
+        self.score      = score
         self.max_circle = max_circle
+        self.moves      = moves
         self.resizable(False, False)
         self.transient(parent)
-        self.grab_set()                  # urobí okno modálne
+        self.grab_set()  # делает окно модальным
 
         is_high = scores.is_high_score(score)
 
@@ -213,13 +289,20 @@ class GameOverDialog(tk.Toplevel):
             self, text=f"{config.TXT_SCORE}: {score}",
             font=("Helvetica", 16),
             bg=config.BG_COLOR, fg=config.TEXT_COLOR_DARK,
-        ).pack(pady=5)
+        ).pack(pady=4)
 
         tk.Label(
             self, text=f"{config.TXT_MAX_CIRCLE}: {max_circle}",
             font=("Helvetica", 14),
             bg=config.BG_COLOR, fg=config.TEXT_COLOR_DARK,
-        ).pack(pady=5)
+        ).pack(pady=4)
+
+        # Показываем количество ходов
+        tk.Label(
+            self, text=f"{config.TXT_MOVES}: {moves}",
+            font=("Helvetica", 14),
+            bg=config.BG_COLOR, fg=config.TEXT_COLOR_DARK,
+        ).pack(pady=4)
 
         if is_high:
             tk.Label(
@@ -241,15 +324,22 @@ class GameOverDialog(tk.Toplevel):
                 self, text=config.TXT_SAVE,
                 command=self._save_and_close,
                 font=("Helvetica", 12), width=12,
+                bg="#8f7a66", fg="white",
+                activebackground="#9f8a76",
+                relief="flat", bd=0,
             ).pack(pady=20)
         else:
             tk.Button(
                 self, text=config.TXT_BACK,
                 command=self.destroy,
                 font=("Helvetica", 12), width=12,
+                bg="#8f7a66", fg="white",
+                activebackground="#9f8a76",
+                relief="flat", bd=0,
             ).pack(pady=20)
 
     def _save_and_close(self) -> None:
+        """Сохраняет рекорд с никнеймом и закрывает диалог."""
         nick = self.nick_var.get().strip() or "???"
-        scores.save_score(nick, self.score, self.max_circle)
+        scores.save_score(nick, self.score, self.max_circle, self.moves)
         self.destroy()

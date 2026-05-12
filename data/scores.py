@@ -1,22 +1,22 @@
 """
-Ukladanie rebríčka top-10 hráčov do JSON súboru.
+Сохранение и загрузка таблицы рекордов.
 
-Formát súboru:
+Формат файла assets/highscores.json:
 [
-  {"nick": "Marek", "score": 10520, "date": "2026-05-11", "max_circle": 1024},
+  {"nick": "Vova", "score": 11100, "max_circle": 1024, "moves": 42},
   ...
 ]
 
-Funkcie:
-- load_scores() — načítať zoznam (alebo prázdny, ak súbor neexistuje)
-- save_score(nick, score, max_circle) — pridať nový záznam, ponechať top-10
+Функции:
+- load_scores()                        — загрузить список рекордов
+- save_score(nick, score, max_circle, moves) — сохранить новый рекорд
+- is_high_score(score)                 — попадает ли результат в топ-10
 """
 
 from __future__ import annotations
 
 import json
 import os
-from datetime import date
 from typing import List, Dict
 
 import config
@@ -24,8 +24,8 @@ import config
 
 def load_scores() -> List[Dict]:
     """
-    Načíta rebríček zo súboru.
-    Ak súbor neexistuje alebo je poškodený, vráti prázdny zoznam.
+    Загружает таблицу рекордов из JSON-файла.
+    Если файл не существует или повреждён — возвращает пустой список.
     """
     path = config.HIGHSCORES_PATH
     if not os.path.exists(path):
@@ -37,37 +37,38 @@ def load_scores() -> List[Dict]:
                 return data
             return []
     except (json.JSONDecodeError, OSError):
-        # Poškodený súbor — radšej začneme od nuly, než aby hra spadla
+        # Повреждённый файл — начинаем с чистого листа, игра не падает
         return []
 
 
-def save_score(nick: str, score: int, max_circle: int) -> List[Dict]:
+def save_score(nick: str, score: int, max_circle: int, moves: int = 0) -> List[Dict]:
     """
-    Pridá nový záznam do rebríčka a uloží súbor.
+    Добавляет новый рекорд в таблицу и сохраняет файл.
 
-    - Záznamy sa zoradia zostupne podľa skóre, pri zhode podľa max_circle.
-    - Uchová sa len top MAX_HIGHSCORES (predvolene 10).
+    - Записи сортируются по убыванию очков (при равных очках — по max_circle)
+    - Хранится только топ MAX_HIGHSCORES (по умолчанию 10)
+    - Дата убрана — храним только игровые данные
 
-    Vracia: aktualizovaný zoznam rekordov.
+    Возвращает обновлённый список рекордов.
     """
     entries = load_scores()
     entries.append({
-        "nick": nick.strip() or "???",
-        "score": int(score),
-        "date": date.today().isoformat(),
+        "nick":       nick.strip() or "???",
+        "score":      int(score),
         "max_circle": int(max_circle),
+        "moves":      int(moves),
     })
 
-    # Zoradiť: najprv vyššie skóre, pri zhode vyšší max_circle
+    # Сортируем: сначала больше очков, при равных — больший кружок
     entries.sort(
         key=lambda e: (e.get("score", 0), e.get("max_circle", 0)),
         reverse=True,
     )
 
-    # Orezať na top N
+    # Оставляем только топ N
     entries = entries[:config.MAX_HIGHSCORES]
 
-    # Uistiť sa, že priečinok existuje
+    # Создаём папку assets если её нет
     os.makedirs(os.path.dirname(config.HIGHSCORES_PATH), exist_ok=True)
 
     with open(config.HIGHSCORES_PATH, "w", encoding="utf-8") as f:
@@ -78,12 +79,12 @@ def save_score(nick: str, score: int, max_circle: int) -> List[Dict]:
 
 def is_high_score(score: int) -> bool:
     """
-    Zistí, či dané skóre patrí do top-10.
-    Použijeme po skončení hry — ak áno, opýtame sa hráča na meno.
+    Проверяет, попадает ли результат в топ-10.
+    Используется после конца игры — если да, просим ввести никнейм.
     """
     entries = load_scores()
     if len(entries) < config.MAX_HIGHSCORES:
-        return True   # rebríček ešte nie je plný
-    # Inak musí byť skóre vyššie ako najnižšie v rebríčku
+        return True  # таблица ещё не заполнена — любой результат попадает
+    # Сравниваем с наименьшим результатом в таблице
     lowest = min(e.get("score", 0) for e in entries)
     return score > lowest

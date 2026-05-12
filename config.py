@@ -1,70 +1,101 @@
 """
-Konfiguračné konštanty pre hru Connect-Merge.
-Tu sú všetky "magické čísla" a hodnoty na jednom mieste.
+Файл конфигурации игры Connect-Merge.
+Здесь собраны все настройки в одном месте —
+чтобы менять внешний вид и поведение игры не лазая по всему коду.
 """
 
-# --- Rozmery hracieho poľa ---
-BOARD_SIZE = 5          # 5x5 mriežka
-CELL_SIZE = 120         # veľkosť bunky v pixeloch (väčšie ako predtým)
-CIRCLE_RADIUS = 48      # polomer kruhu v pixeloch (väčšie kruhy)
-BOARD_PADDING = 30      # okraj okolo poľa
-BOARD_CORNER_RADIUS = 25   # zaoblenie rohov hracieho poľa
+# ---------------------------------------------------------------
+# РАЗМЕРЫ ИГРОВОГО ПОЛЯ
+# Эти константы определяют размер и внешний вид сетки на экране
+# ---------------------------------------------------------------
 
-# --- Herná logika ---
-INITIAL_MAX_VALUE = 64  # maximálna hodnota kruhov pri štarte hry
-                        # spawnujú sa hodnoty 2, 4, 8, 16, 32 (menšie ako 64)
-MIN_LINE_LENGTH = 2     # minimálna dĺžka spojnice (aspoň 2 kruhy)
+BOARD_SIZE = 5          # количество клеток по горизонтали и вертикали (5×5)
+CELL_SIZE = 120         # размер одной клетки в пикселях
+CIRCLE_RADIUS = 48      # радиус кружка в пикселях (должен быть меньше CELL_SIZE / 2)
+CIRCLE_SCALE_SELECTED = 1.18  # во сколько раз увеличивается кружок при выделении (18%)
+BOARD_PADDING = 30      # отступ от края поля до первого кружка в пикселях
+BOARD_CORNER_RADIUS = 25  # радиус скругления углов фона игрового поля
 
-# --- Farby pre jednotlivé hodnoty kruhov (podľa referencie) ---
-# Sýte, jasné farby — biely text na všetkých
+# ---------------------------------------------------------------
+# ИГРОВАЯ ЛОГИКА
+# Параметры, влияющие на правила игры
+# ---------------------------------------------------------------
+
+INITIAL_MAX_VALUE = 64  # максимальное значение кружка при старте игры
+                        # то есть в начале спавнятся значения 2, 4, 8, 16, 32
+                        # (всегда меньше этого числа)
+MIN_LINE_LENGTH = 2     # минимальное количество кружков в цепочке для мёрджа
+
+# ---------------------------------------------------------------
+# ЦВЕТА КРУЖКОВ
+# Словарь: значение кружка → цвет в формате HEX
+# Чтобы поменять цвет кружка — просто замени HEX-код напротив нужного числа
+# ---------------------------------------------------------------
+
 CIRCLE_COLORS = {
-    2:    "#f5b942",   # oranžová
-    4:    "#e85d3a",   # červená
-    8:    "#5cc35c",   # zelená
-    16:   "#5db9e8",   # svetlo modrá
-    32:   "#e85a8c",   # ružová
-    64:   "#4dc9a8",   # tyrkysová
-    128:  "#6680d4",   # tmavšie modrá
-    256:  "#c97fd4",   # fialová
-    512:  "#f5c842",   # zlatá
-    1024: "#ff8c00",   # tmavo oranžová
-    2048: "#3c3a32",   # tmavá
-    4096: "#2c2a22",   # ešte tmavšia
+    2:    "#f5b942",   # оранжевый
+    4:    "#e85d3a",   # красный
+    8:    "#5cc35c",   # зелёный
+    16:   "#5db9e8",   # голубой
+    32:   "#e85a8c",   # розовый
+    64:   "#4dc9a8",   # бирюзовый
+    128:  "#6680d4",   # синий
+    256:  "#c97fd4",   # фиолетовый
+    512:  "#f5c842",   # золотой
+    1024: "#ff8c00",   # тёмно-оранжевый
+    2048: "#3c3a32",   # тёмный
+    4096: "#2c2a22",   # очень тёмный
 }
-DEFAULT_CIRCLE_COLOR = "#3c3a32"
+DEFAULT_CIRCLE_COLOR = "#3c3a32"  # цвет для значений, которых нет в словаре выше
 
-# --- Farby textu ---
-# Podľa referencie: biely text na všetkých farebných kruhoch
-TEXT_COLOR_LIGHT = "#ffffff"       # biely text (vždy na kruhoch)
-TEXT_COLOR_DARK = "#776e65"        # tmavý text (pre nadpisy a UI)
+# ---------------------------------------------------------------
+# ЦВЕТА ТЕКСТА
+# ---------------------------------------------------------------
 
-# --- Farby UI ---
-BG_COLOR = "#ffffff"               # biele pozadie okna
-BOARD_BG_COLOR = "#f7f7f7"         # svetlo-sivé pozadie hracieho poľa
-BOARD_BORDER_COLOR = "#e0e0e0"     # jemný okraj okolo poľa
-EMPTY_CELL_COLOR = "#f7f7f7"       # prázdna bunka splýva s pozadím
-LINE_COLOR = "#999999"             # jemnejšia farba spojnice
-LINE_WIDTH = 8                     # hrubšia čiara
+TEXT_COLOR_LIGHT = "#ffffff"   # белый — используется на всех цветных кружках
+TEXT_COLOR_DARK  = "#776e65"   # тёмно-серый — используется в заголовках и UI
 
-# --- Animácia ---
-ANIMATION_FPS = 60
-ANIMATION_INTERVAL_MS = 1000 // ANIMATION_FPS
-FALL_SPEED = 30
+# ---------------------------------------------------------------
+# ЦВЕТА ИНТЕРФЕЙСА (UI)
+# ---------------------------------------------------------------
 
-# --- Rebríček ---
-MAX_HIGHSCORES = 10
-HIGHSCORES_PATH = "assets/highscores.json"
+BG_COLOR           = "#ffffff"  # фон всего окна приложения
+BOARD_BG_COLOR     = "#f7f7f7"  # фон игрового поля (светло-серый)
+BOARD_BORDER_COLOR = "#e0e0e0"  # цвет рамки вокруг игрового поля
+EMPTY_CELL_COLOR   = "#f7f7f7"  # пустая клетка — сливается с фоном поля
+LINE_COLOR         = "#999999"  # цвет линии соединения (запасной, если цвет не найден)
+LINE_WIDTH         = 8          # толщина линии соединения в пикселях
 
-# --- Texty (slovenčina) ---
-TXT_TITLE = "Connect-Merge"
-TXT_PLAY = "Hrať"
+# ---------------------------------------------------------------
+# АНИМАЦИЯ
+# ---------------------------------------------------------------
+
+ANIMATION_FPS         = 60                     # кадров в секунду
+ANIMATION_INTERVAL_MS = 1000 // ANIMATION_FPS  # интервал между кадрами в мс (≈16 мс)
+FALL_SPEED            = 30                      # скорость падения кружков (пикселей за кадр)
+
+# ---------------------------------------------------------------
+# ТАБЛИЦА РЕКОРДОВ
+# ---------------------------------------------------------------
+
+MAX_HIGHSCORES  = 10                       # сколько лучших результатов хранить
+HIGHSCORES_PATH = "assets/highscores.json" # путь к файлу с рекордами
+
+# ---------------------------------------------------------------
+# ТЕКСТЫ ИНТЕРФЕЙСА
+# Вынесены сюда чтобы легко менять язык или формулировки
+# ---------------------------------------------------------------
+
+TXT_TITLE      = "Connect-Merge"
+TXT_PLAY       = "Hrať"
 TXT_HIGHSCORES = "Rebríček"
-TXT_EXIT = "Koniec"
-TXT_SCORE = "Skóre"
+TXT_EXIT       = "Koniec"
+TXT_SCORE      = "Skóre"
 TXT_MAX_CIRCLE = "Najväčší kruh"
-TXT_GAME_OVER = "Koniec hry"
+TXT_GAME_OVER  = "Koniec hry"
 TXT_ENTER_NICK = "Zadajte prezývku:"
-TXT_SAVE = "Uložiť"
-TXT_BACK = "Späť"
-TXT_NICK = "Prezývka"
-TXT_DATE = "Dátum"
+TXT_SAVE       = "Uložiť"
+TXT_BACK       = "Späť"
+TXT_MOVES      = "Ťahy"
+TXT_NICK       = "Prezývka"
+TXT_DATE       = "Dátum"

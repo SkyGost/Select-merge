@@ -156,6 +156,7 @@ class GameView(tk.Frame):
         self.current_path: List[Cell] = []
         self.dragging = False
         self.line_id: Optional[int] = None   # ID čiary na canvase počas ťahania
+        self.line_segments: List[int] = []   # ID segmentov farebnej čiary
 
         # Animátor
         self.animator: Optional[Animator] = None
@@ -190,6 +191,15 @@ class GameView(tk.Frame):
             fg=config.TEXT_COLOR_DARK,
         )
         self.max_label.pack(side="left", padx=30)
+
+        self.moves_label = tk.Label(
+            self.info_frame,
+            text=f"{config.TXT_MOVES}: 0",
+            font=("Helvetica", 16),
+            bg=config.BG_COLOR,
+            fg=config.TEXT_COLOR_DARK,
+        )
+        self.moves_label.pack(side="left", padx=10)
 
         self.back_btn = tk.Button(
             self.info_frame,
@@ -276,21 +286,19 @@ class GameView(tk.Frame):
     def _create_circle_visuals(
         self, circle: Circle, r: int, c: int,
         override_y: Optional[float] = None,
+        scale: float = 1.0,
     ) -> Tuple[int, int]:
         """
         Vytvorí grafickú reprezentáciu kruhu (oval + text) na canvase.
         Vráti (oval_id, text_id) a zapíše do self.cell_items[(r, c)].
-
-        Ak override_y nie je None, vytvorí sa na zadanej y-pozícii
-        (používa sa pre animáciu padu zhora).
+        scale > 1.0 — kruh je zväčšený (pri výbere).
         """
         cx, cy = self._cell_center(r, c)
         if override_y is not None:
             cy = override_y
 
-        radius = config.CIRCLE_RADIUS
+        radius = int(config.CIRCLE_RADIUS * scale)
         color = config.CIRCLE_COLORS.get(circle.value, config.DEFAULT_CIRCLE_COLOR)
-        # Biely text na všetkých farebných kruhoch (podľa referencie)
         text_color = config.TEXT_COLOR_LIGHT
 
         oval_id = self.canvas.create_oval(
@@ -305,6 +313,22 @@ class GameView(tk.Frame):
         )
         self.cell_items[(r, c)] = (oval_id, text_id)
         return oval_id, text_id
+
+    def _scale_circle(self, cell: Cell, scale: float) -> None:
+        """Zmení veľkosť kruhu aj textu (čísla) na canvase."""
+        if cell not in self.cell_items:
+            return
+        oval_id, text_id = self.cell_items[cell]
+        r, c = cell
+        cx, cy = self._cell_center(r, c)
+        radius = int(config.CIRCLE_RADIUS * scale)
+        self.canvas.coords(oval_id, cx - radius, cy - radius, cx + radius, cy + radius)
+        circle = self.board.get_circle(r, c)
+        if circle is not None:
+            base_size = self._font_size_for(circle.value)
+            new_size = int(base_size * scale)
+            self.canvas.itemconfig(text_id, font=("Helvetica", new_size, "bold"))
+        self.canvas.tag_raise(text_id)
 
     @staticmethod
     def _format_value(value: int) -> str:
@@ -368,6 +392,9 @@ class GameView(tk.Frame):
         self.max_label.config(
             text=f"{config.TXT_MAX_CIRCLE}: {self.board.stats.max_circle}"
         )
+        self.moves_label.config(
+            text=f"{config.TXT_MOVES}: {self.board.stats.moves}"
+        )
 
     # ----------------------------------------------------------------
     #  Spracovanie myši
@@ -386,6 +413,11 @@ class GameView(tk.Frame):
         # Začať novú spojnicu
         self.current_path = [cell]
         self.dragging = True
+        self._scale_circle(cell, config.CIRCLE_SCALE_SELECTED)
+        if cell in self.cell_items:
+            oval_id, text_id = self.cell_items[cell]
+            self.canvas.tag_raise(oval_id)
+            self.canvas.tag_raise(text_id)
         self._redraw_line()
         sounds.play_click()
 
@@ -442,28 +474,61 @@ class GameView(tk.Frame):
             self._execute_merge(path)
 
     def _redraw_line(self) -> None:
-        """Prekreslí aktuálnu spojnicu (čiaru cez stredy buniek)."""
+        """
+        Prekreslí spojnicu ako farebné segmenty v cielenom farbe kruhu.
+        Zväčší vybrané kruhy, ostatné vráti na pôvodnú veľkosť.
+        """
         self._clear_line()
-        if len(self.current_path) < 1:
+        if not self.current_path:
             return
-        # Body čiary = stredy buniek
-        points: List[float] = []
-        for (r, c) in self.current_path:
-            cx, cy = self._cell_center(r, c)
-            points.extend([cx, cy])
-        if len(points) >= 4:   # aspoň 2 body
-            self.line_id = self.canvas.create_line(
-                *points,
-                fill=config.LINE_COLOR,
+
+        # Zistiť farbu z prvého kruhu v ceste
+        first_circle = self.board.get_circle(*self.current_path[0])
+        line_color = config.LINE_COLOR
+        if first_circle is not None:
+            line_color = config.CIRCLE_COLORS.get(first_circle.value, config.LINE_COLOR)
+
+        # Nakresliť farebné segmenty medzi stredmi buniek
+        for i in range(len(self.current_path) - 1):
+            r1, c1 = self.current_path[i]
+            r2, c2 = self.current_path[i + 1]
+            x1, y1 = self._cell_center(r1, c1)
+            x2, y2 = self._cell_center(r2, c2)
+            seg_id = self.canvas.create_line(
+                x1, y1, x2, y2,
+                fill=line_color,
                 width=config.LINE_WIDTH,
                 capstyle="round",
                 joinstyle="round",
             )
+            self.line_segments.append(seg_id)
+
+        # Zväčšiť vybrané kruhy, ostatné normalizovať
+        selected_set = set(self.current_path)
+        for cell in list(self.cell_items.keys()):
+            if cell in selected_set:
+                self._scale_circle(cell, config.CIRCLE_SCALE_SELECTED)
+            else:
+                self._scale_circle(cell, 1.0)
+
+        # Vybrané kruhy a text vyzdvihnúť nad čiary
+        for cell in self.current_path:
+            if cell in self.cell_items:
+                oval_id, text_id = self.cell_items[cell]
+                self.canvas.tag_raise(oval_id)
+                self.canvas.tag_raise(text_id)
 
     def _clear_line(self) -> None:
+        """Zmaže všetky segmenty čiary a vráti kruhy na pôvodnú veľkosť."""
+        for seg_id in self.line_segments:
+            self.canvas.delete(seg_id)
+        self.line_segments.clear()
         if self.line_id is not None:
             self.canvas.delete(self.line_id)
             self.line_id = None
+        # Vrátiť všetky kruhy na normálnu veľkosť
+        for cell in list(self.cell_items.keys()):
+            self._scale_circle(cell, 1.0)
 
     # ----------------------------------------------------------------
     #  Vykonanie merge + animácia
@@ -472,38 +537,70 @@ class GameView(tk.Frame):
     def _execute_merge(self, path: List[Cell]) -> None:
         """
         Spracuje validnú spojnicu:
-        1. Vymaže kruhy z canvasu (okrem posledného)
-        2. Aktualizuje posledný kruh na novú hodnotu
+        1. Animuje kruhy (zmenšenie + posun k poslednému)
+        2. Po animácii vykoná merge v modeli
         3. Aplikuje gravitáciu + spawn nových kruhov
-        4. Spustí animácie padu
-        5. Po skončení skontroluje game over
         """
-        # Zvuk merge
         sounds.play_merge()
 
-        # 1. Vymazať canvas items pre kruhy okrem posledného
+        last_cell = path[-1]
+        tx, ty = self._cell_center(*last_cell)
+
+        # Kruhy ktoré sa budú animovať (všetky okrem posledného)
+        animating_items: List[Tuple[int, int, float, float]] = []
         for (r, c) in path[:-1]:
             if (r, c) in self.cell_items:
                 oval_id, text_id = self.cell_items.pop((r, c))
-                self.canvas.delete(oval_id)
-                self.canvas.delete(text_id)
+                cx, cy = self._cell_center(r, c)
+                animating_items.append((oval_id, text_id, cx, cy))
 
-        # 2. Vykonať merge v modeli
-        last_cell = path[-1]
-        self.board.merge_line(path)
-        self._update_info()
+        STEPS = 8   # počet krokov animácie
 
-        # 3. Prekresliť posledný kruh s novou hodnotou
-        if last_cell in self.cell_items:
-            oval_id, text_id = self.cell_items.pop(last_cell)
-            self.canvas.delete(oval_id)
-            self.canvas.delete(text_id)
-        new_circle = self.board.grid[last_cell[0]][last_cell[1]]
-        if new_circle is not None:
-            self._create_circle_visuals(new_circle, *last_cell)
+        def _animate_collapse(step: int) -> None:
+            if step >= STEPS:
+                # Zmazať animované kruhy
+                for oval_id, text_id, _, _ in animating_items:
+                    self.canvas.delete(oval_id)
+                    self.canvas.delete(text_id)
+                # Vykonať merge v modeli
+                self.board.merge_line(path)
+                self._update_info()
+                # Prekresliť posledný kruh s novou hodnotou
+                if last_cell in self.cell_items:
+                    oid, tid = self.cell_items.pop(last_cell)
+                    self.canvas.delete(oid)
+                    self.canvas.delete(tid)
+                new_circle = self.board.grid[last_cell[0]][last_cell[1]]
+                if new_circle is not None:
+                    self._create_circle_visuals(new_circle, *last_cell)
+                self._apply_gravity_animated()
+                return
 
-        # 4. Gravitácia + spawn s animáciou
-        self._apply_gravity_animated()
+            progress = (step + 1) / STEPS       # 0.0 → 1.0
+            scale = 1.0 - progress              # 1.0 → 0.0
+
+            for oval_id, text_id, cx, cy in animating_items:
+                # Posun smerom k poslednému kruhu
+                new_cx = cx + (tx - cx) * progress
+                new_cy = cy + (ty - cy) * progress
+                r_now = int(config.CIRCLE_RADIUS * scale)
+                self.canvas.coords(
+                    oval_id,
+                    new_cx - r_now, new_cy - r_now,
+                    new_cx + r_now, new_cy + r_now,
+                )
+                self.canvas.coords(text_id, new_cx, new_cy)
+                # Zmenšiť aj font
+                font_size = max(1, int(self._font_size_for(
+                    self.board.get_circle(*path[0]).value
+                    if self.board.get_circle(*path[0]) else 2
+                ) * scale))
+                self.canvas.itemconfig(text_id, font=("Helvetica", font_size, "bold"))
+
+            self.canvas.after(config.ANIMATION_INTERVAL_MS,
+                              lambda: _animate_collapse(step + 1))
+
+        _animate_collapse(0)
 
     def _apply_gravity_animated(self) -> None:
         """
@@ -547,9 +644,10 @@ class GameView(tk.Frame):
             after_falls()
 
     def _check_game_over(self) -> None:
-        """Po každom merge skontroluje, či hra skončila."""
+        """Проверяет конец игры после каждого мёрджа."""
         if self.board.is_game_over():
             self.on_game_over(
                 self.board.stats.score,
                 self.board.stats.max_circle,
+                self.board.stats.moves,
             )
