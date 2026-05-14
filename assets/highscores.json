@@ -1,14 +1,14 @@
 [
   {
-    "nick": "nazarčik2",
-    "score": 20892,
-    "date": "2026-05-11",
-    "max_circle": 2048
+    "nick": "Vova test",
+    "score": 7788,
+    "max_circle": 1024,
+    "moves": 66
   },
   {
-    "nick": "nazarčik",
-    "score": 6404,
-    "date": "2026-05-11",
-    "max_circle": 1024
+    "nick": "vovaššľš",
+    "score": 3456,
+    "max_circle": 2048,
+    "moves": 4
   }
 ]
